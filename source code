@@ -1,36 +1,3 @@
-/*
-  Under construction...
-  Test and validation of RDA5807 on UNO/NANO or other ATMEGA328 based device.
-  It is FM receiver with
-
-   Nano and RDA5807 wireup
-
-  Wire up on Arduino UNO, Nano or Pro mini
-
-  | Device name               | Device Pin / Description  |  Arduino Pin  |
-  | --------------------------| --------------------      | ------------  |
-  | OLED - I2C                |                           |               |
-  |                           |  SDA                      |     A4        |
-  |                           |  SCLK                     |     A5        |
-  | --------------------------| ------------------------- | --------------|
-  | RDA5807                   |                           |               |
-  |                           | SDA/SDIO                  |     A4        |
-  |                           | SCLK (Clock)              |     A5        |
-  | --------------------------| --------------------------| --------------|
-  | Buttons                   |                           |               |
-  |                           | Volume Up                 |      8        |
-  |                           | Volume Down               |      9        |
-  |                           | Mute                      |     10        |
-  |                           | Bass                      |     11        |
-  |                           | SEEK (encoder button)     |     D14/A0    |
-  | --------------------------| --------------------------|---------------|
-  | Encoder                   |                           |               |
-  |                           |<RDA5807.h> A                         |       2       |
-  |                           | B                         |       3       |
-
-   By Ricardo Lima Caratti, 2020.
-*/
-
 #include <Arduino.h>
 #include <EEPROM.h>
 #include <RDA5807.h> // It is a minimal receicer with two push buttons (ATmega328 - Uno, Nano etc)
