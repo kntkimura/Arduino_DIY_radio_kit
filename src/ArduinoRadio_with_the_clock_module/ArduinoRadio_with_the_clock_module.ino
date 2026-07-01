@@ -538,8 +538,8 @@ void setup() {
   Rtc.Begin();
 
   // 一度だけ時刻合わせ
-  RtcDateTime compiled(__DATE__, __TIME__);
-  Rtc.SetDateTime(compiled + 40 );
+  //RtcDateTime compiled(__DATE__, __TIME__);
+  //Rtc.SetDateTime(compiled + 40 );
   //時刻合わせのための書き込みをしたら上に行をコメントアウトして書き込みをやり直す
 
   if (!Rtc.GetIsRunning()) {
