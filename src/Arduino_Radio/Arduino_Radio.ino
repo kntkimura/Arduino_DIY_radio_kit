@@ -126,8 +126,8 @@ U8G2_SSD1306_128X64_NONAME_1_HW_I2C u8g2(U8G2_R0);
 RDA5807 rx;
 #define DEFAULT_VOLUME 3
 #define STORE_TIME 100  // 単発ボタン用の最小間隔(ms)
-#define LONG_PRESS_START 420     // 長押し連続開始までの時間(ms)
-#define LONG_PRESS_INTERVAL 90   // 長押し連続送りの間隔(ms)
+#define LONG_PRESS_START 150     // 長押し連続開始までの時間(ms)
+#define LONG_PRESS_INTERVAL 120   // 長押し連続送りの間隔(ms)
 
 const uint8_t app_id = 50;  // EEPROM用識別ID
 const int eeprom_address = 0;
@@ -343,8 +343,8 @@ const uint8_t PATTERNS[28] = {
 volatile uint8_t segDigits[NUM_DIGITS] = { 27, 27, 27, 27, 27 };
 
 // ================== 局名（PROGMEM） ==================
-const char station12[] PROGMEM = "bayfm";
-const char station13[] PROGMEM = "FM NACK5";
+const char station14[] PROGMEM = "bayfm";
+const char station15[] PROGMEM = "FM NACK5";
 const char station1[] PROGMEM = "TokyoFM";
 const char station2[] PROGMEM = "J-wave";
 const char station3[] PROGMEM = "NHK-FM";
@@ -356,6 +356,8 @@ const char station8[] PROGMEM = "TBSradio";
 const char station9[] PROGMEM = " Bunka\nHousou";
 const char station10[] PROGMEM = " Radio\nNippon";
 const char station11[] PROGMEM = " Nippon\nHousou";
+const char station12[] PROGMEM = " Shonan\nBeachFM";
+const char station13[] PROGMEM = " Radio\nShonan";
 const char stationDefault[] PROGMEM = "no Data";
 
 // ================== EEPROM 配置 ==================
@@ -431,13 +433,15 @@ void saveAllReceiverInformation() {
 // ================== ステーション名取得（PROGMEM→RAM） ==================
 void getRadioStation(uint16_t frequency, char* buffer) {
   switch (frequency) {
-    case 7800: strcpy_P(buffer, station12); break;
-    case 7950: strcpy_P(buffer, station13); break;
+    case 7800: strcpy_P(buffer, station14); break;
+    case 7890: strcpy_P(buffer, station12); break;
+    case 7950: strcpy_P(buffer, station15); break;
     case 8000: strcpy_P(buffer, station1); break;
     case 8130: strcpy_P(buffer, station2); break;
     case 8190:
     case 8250: strcpy_P(buffer, station3); break;
     case 8280: strcpy_P(buffer, station4); break;
+    case 8310: strcpy_P(buffer, station13); break;
     case 8370: strcpy_P(buffer, station5); break;
     case 8470:
     case 8700: strcpy_P(buffer, station6); break;
@@ -471,21 +475,17 @@ void drawStrWithNewlines(int x, int y, int lineH, const char* s) {
 }
 
 // ================== 周波数文字列整形 ==================
-void formatFreq(uint16_t f10kHz, char* out) {
-  uint8_t mhz = f10kHz / 100;
-  out[0] = (mhz >= 100) ? '1' : ' ';
-  out[1] = char('0' + (mhz / 10) % 10);
-  out[2] = char('0' + mhz % 10);
-  out[3] = '.';
-  out[4] = char('0' + ((f10kHz % 100) / 10));
-  out[5] = '\0';
+void formatFreq(uint16_t f10kHz, char* out, size_t n) {
+  int mhz = f10kHz / 100;  // 10kHz単位→MHz整数
+  int dec1 = (f10kHz % 100) / 10;
+  snprintf(out, n, "%2d.%1d", mhz, dec1);
 }
 
 // ================== ラジオ画面描画 ==================
 void drawRadioScreen(const char* station, uint8_t vol, uint16_t f10kHz) {
   char fbuf[8];
   char vbuf[4];
-  formatFreq(f10kHz, fbuf);
+  formatFreq(f10kHz, fbuf, sizeof(fbuf));
 
   u8g2.firstPage();
   do {
@@ -498,19 +498,17 @@ void drawRadioScreen(const char* station, uint8_t vol, uint16_t f10kHz) {
     u8g2.setFont(u8g2_font_8x13_tr);
     u8g2.drawStr(fw + 2, 18, "MHz");
 
-    // 局名（大きめフォント）
+    // 局名（改行対応：8x13）
     u8g2.setFont(u8g2_font_10x20_tf);
-    int sw = u8g2.getStrWidth(station);
+    int sw = u8g2.getStrWidth(station);  // 1行目の幅を基準
     int sx = (128 - sw) / 2;
-    drawStrWithNewlines(sx, 42, 20, station);
+    drawStrWithNewlines(sx, 38, 13, station);
 
     // Vol
     u8g2.setFont(u8g2_font_8x13_tr);
     u8g2.drawStr(80, 64, "Vol");
     u8g2.setFont(u8g2_font_logisoso16_tn);
-    vbuf[0] = (vol >= 10) ? char('0' + vol / 10) : ' ';
-    vbuf[1] = char('0' + vol % 10);
-    vbuf[2] = '\0';
+    snprintf(vbuf, sizeof(vbuf), "%2u", vol);
     u8g2.drawStr(100, 64, vbuf);
   } while (u8g2.nextPage());
 }
@@ -848,6 +846,7 @@ uint8_t stableButton(uint8_t channelIndex, uint8_t raw, unsigned long now) {
 }
 
 // ================== ボタン処理 ==================
+// ================== ボタン処理 ==================
 void getButtonState() {
   unsigned long now = millis();
 
@@ -857,8 +856,6 @@ void getButtonState() {
   uint8_t a0raw = gameMode ? classifyAnalogButtonGame(a0v) : classifyAnalogButton(a0v);
   uint8_t a1raw = gameMode ? classifyAnalogButtonGame(a1v) : classifyAnalogButton(a1v);
 
-  // スネーク中は方向キーの短いタップを拾うため、デバウンス確定を待たず即反映。
-  // ラジオ中は従来通りstableButton()で誤作動を抑える。
   uint8_t a0b = gameMode ? a0raw : stableButton(0, a0raw, now);
   uint8_t a1b = gameMode ? a1raw : stableButton(1, a1raw, now);
 
@@ -872,7 +869,6 @@ void getButtonState() {
   bool a1_3 = (a1b == BTN_3);  // コンソール起動 / 決定 / ゲームPAUSE
   bool a1_4 = (a1b == BTN_4);  // キャンセル / ゲーム終了
 
-  // SEEKボタンは「離した」ことを確認してから次回を許可する。
   if (!a0_3) seekUpLockedUntilRelease = false;
   if (!a0_4) seekDownLockedUntilRelease = false;
 
@@ -918,27 +914,27 @@ void getButtonState() {
 
   // ===== ゲーム中 =====
   if (gameMode) {
-    // ゲーム中はA0方向キーではラジオを起動しない。
-    // A1_1だけでラジオON/OFFをトグルする。
-    // 押しっぱなしで連続トグルしないよう、離すまでロックする。
     if (!a1_1) {
       gameRadioToggleLockedUntilRelease = false;
     }
+
     if (a1_1 && !gameRadioToggleLockedUntilRelease) {
       gameRadioToggleLockedUntilRelease = true;
+
       if (radioPoweredDownForGame) {
         radioOnFromGameButton();
       } else {
         radioOffForGame();
       }
+
       anyPressed = true;
       lastUserActionTime = now;
     }
 
-    // A1_2でフルーツ取得音のON/OFFを切り替える。
     if (!a1_2) {
       fruitSoundToggleLockedUntilRelease = false;
     }
+
     if (a1_2 && !fruitSoundToggleLockedUntilRelease) {
       fruitSoundToggleLockedUntilRelease = true;
       fruitSoundEnabled = !fruitSoundEnabled;
@@ -948,43 +944,58 @@ void getButtonState() {
       lastUserActionTime = now;
     }
 
-    // スネークの方向操作は、平均化・デバウンスを最小にして即反映。
-    // 速度安定化はgameUpdate()側で行い、入力はここでできるだけ取りこぼさない。
     uint8_t dirButton = BTN_NONE;
-    if (a0_1) dirButton = BTN_1;       // 上
-    else if (a0_2) dirButton = BTN_2;  // 右
-    else if (a0_3) dirButton = BTN_3;  // 下
-    else if (a0_4) dirButton = BTN_4;  // 左
+    if (a0_1) dirButton = BTN_1;
+    else if (a0_2) dirButton = BTN_2;
+    else if (a0_3) dirButton = BTN_3;
+    else if (a0_4) dirButton = BTN_4;
 
-    // スネーク中は、別方向に変わった瞬間も新しい入力として即受け付ける。
     bool dirPressedNow = (dirButton != BTN_NONE && dirButton != lastGameDirButton);
     lastGameDirButton = dirButton;
 
     bool directionAccepted = false;
+
     if (dirPressedNow) {
-      if (dirButton == BTN_1 && dy !=  1) { dx =  0; dy = -1; directionAccepted = true; } // 上
-      else if (dirButton == BTN_2 && dx != -1) { dx =  1; dy =  0; directionAccepted = true; } // 右
-      else if (dirButton == BTN_3 && dy != -1) { dx =  0; dy =  1; directionAccepted = true; } // 下
-      else if (dirButton == BTN_4 && dx !=  1) { dx = -1; dy =  0; directionAccepted = true; } // 左
+      if (dirButton == BTN_1 && dy !=  1) {
+        dx = 0;
+        dy = -1;
+        directionAccepted = true;
+      } else if (dirButton == BTN_2 && dx != -1) {
+        dx = 1;
+        dy = 0;
+        directionAccepted = true;
+      } else if (dirButton == BTN_3 && dy != -1) {
+        dx = 0;
+        dy = 1;
+        directionAccepted = true;
+      } else if (dirButton == BTN_4 && dx != 1) {
+        dx = -1;
+        dy = 0;
+        directionAccepted = true;
+      }
     }
 
     if (directionAccepted) {
-      // 方向ボタンを押した瞬間に1マス進める。
-      // その直後に通常tickが重なって二重移動しないよう、基準時刻もリセットする。
       if (!gameOver && !gameClear && !paused) {
         gameStep();
         lastTick = now;
-        OLEDdisplayGame();   // 押した瞬間の移動をすぐ画面に出す
+        OLEDdisplayGame();
         lastGameDraw = now;
       }
+
       updateSegForGame();
       anyPressed = true;
     }
 
     if (trigA1_3 && (now - storeTime) > 200) {
       storeTime = now;
-      if (gameOver || gameClear) gameReset();
-      else paused = !paused;
+
+      if (gameOver || gameClear) {
+        gameReset();
+      } else {
+        paused = !paused;
+      }
+
       updateSegForGame();
       oledNeedsUpdate = true;
       anyPressed = true;
@@ -1000,6 +1011,7 @@ void getButtonState() {
       lastUserActionTime = now;
       oledNeedsUpdate = true;
     }
+
     return;
   }
 
@@ -1007,6 +1019,13 @@ void getButtonState() {
   if (trigA0_1) {
     rx.setFrequencyDown();
     currentFrequency = rx.getFrequency();
+
+    // 下方向：76.0MHz以下になったら95.0MHzへジャンプ
+    if (currentFrequency <= 7600) {
+      rx.setFrequency(9500);
+      currentFrequency = rx.getFrequency();
+    }
+
     updateSegForRadio();
     oledNeedsUpdate = true;
     anyPressed = true;
@@ -1014,6 +1033,13 @@ void getButtonState() {
   } else if (trigA0_2) {
     rx.setFrequencyUp();
     currentFrequency = rx.getFrequency();
+
+    // 上方向：95.0MHzを超えたら76.0MHzへジャンプ
+    if (currentFrequency > 9500) {
+      rx.setFrequency(7600);
+      currentFrequency = rx.getFrequency();
+    }
+
     updateSegForRadio();
     oledNeedsUpdate = true;
     anyPressed = true;
