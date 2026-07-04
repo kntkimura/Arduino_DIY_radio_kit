@@ -169,6 +169,9 @@ volatile bool seekdown = false;
 bool gameMode = false;    // スネークゲーム画面
 bool darkMode = false;    // ラジオ動作中に表示だけ消すダークモード
 bool inConsole = false;   // コンソール画面中か
+bool consoleEnterLockedUntilRelease = false;  // メニュー起動時のA1_3押しっぱなし対策
+bool consoleActionLockedUntilRelease = false; // メニュー内ボタンの二重入力防止
+bool modeTransitionLockedUntilRelease = false;  // コンソール終了時のボタン持ち越し防止
 uint8_t consoleIndex = 0;
 
 // コンソールメニュー
@@ -885,30 +888,89 @@ void getButtonState() {
 
   // ===== コンソール中 =====
   if (inConsole) {
-    if (trigA1_2) {
+
+    // メニュー起動に使ったA1_3を離すまでは、
+    // メニュー内の「決定」として扱わない。
+    if (consoleEnterLockedUntilRelease) {
+      if (!a1_3) {
+        consoleEnterLockedUntilRelease = false;
+        consoleActionLockedUntilRelease = false;
+        resetButtonRepeatState(BTN_A1_1);
+        resetButtonRepeatState(BTN_A1_2);
+        resetButtonRepeatState(BTN_A1_3);
+        resetButtonRepeatState(BTN_A1_4);
+      }
+      return;
+    }
+
+    // メニュー画面では長押しリピートを使わず、
+    // 「押して離すまで1回だけ」にする。
+    // これにより、カーソル移動が1回の押下で2つ進む問題を防ぐ。
+    bool anyConsoleButton = a1_1 || a1_2 || a1_3 || a1_4;
+
+    if (!anyConsoleButton) {
+      consoleActionLockedUntilRelease = false;
+      resetButtonRepeatState(BTN_A1_1);
+      resetButtonRepeatState(BTN_A1_2);
+      resetButtonRepeatState(BTN_A1_3);
+      resetButtonRepeatState(BTN_A1_4);
+      return;
+    }
+
+    if (consoleActionLockedUntilRelease) {
+      return;
+    }
+
+    consoleActionLockedUntilRelease = true;
+
+    if (a1_2) {
       consoleIndex = (consoleIndex + NUM_MENU_ITEMS - 1) % NUM_MENU_ITEMS;
       consoleNeedsRedraw = true;
       anyPressed = true;
 
-    } else if (trigA1_1) {
+    } else if (a1_1) {
       consoleIndex = (consoleIndex + 1) % NUM_MENU_ITEMS;
       consoleNeedsRedraw = true;
       anyPressed = true;
 
-    } else if (trigA1_3 && (now - storeTime) > STORE_TIME) {
+    } else if (a1_3 && (now - storeTime) > 300) {
       storeTime = now;
       applyConsoleSelection();
       inConsole = false;
+      consoleActionLockedUntilRelease = false;
+      modeTransitionLockedUntilRelease = true;
       anyPressed = true;
 
-    } else if (trigA1_4 && (now - storeTime) > STORE_TIME) {
+    } else if (a1_4 && (now - storeTime) > STORE_TIME) {
       storeTime = now;
       inConsole = false;
+      consoleActionLockedUntilRelease = false;
+      modeTransitionLockedUntilRelease = true;
       anyPressed = true;
       oledNeedsUpdate = true;
     }
 
     if (anyPressed) lastUserActionTime = now;
+    return;
+  }
+
+  // ===== コンソール終了直後 =====
+  // コンソールを閉じた時に押していたボタンを離すまでは、
+  // 通常ラジオ操作・ゲーム操作へ入力を持ち越さない。
+  if (modeTransitionLockedUntilRelease) {
+    bool anyButton = a0_1 || a0_2 || a0_3 || a0_4 || a1_1 || a1_2 || a1_3 || a1_4;
+
+    if (!anyButton) {
+      modeTransitionLockedUntilRelease = false;
+      resetButtonRepeatState(BTN_A0_1);
+      resetButtonRepeatState(BTN_A0_2);
+      resetButtonRepeatState(BTN_A0_3);
+      resetButtonRepeatState(BTN_A0_4);
+      resetButtonRepeatState(BTN_A1_1);
+      resetButtonRepeatState(BTN_A1_2);
+      resetButtonRepeatState(BTN_A1_3);
+      resetButtonRepeatState(BTN_A1_4);
+    }
     return;
   }
 
@@ -1096,6 +1158,10 @@ void getButtonState() {
     inConsole = true;
     consoleNeedsRedraw = true;
     anyPressed = true;
+
+    // 重要：A1_3を離すまで、メニュー内の決定を禁止する
+    consoleEnterLockedUntilRelease = true;
+    consoleActionLockedUntilRelease = false;
   }
 
   if (anyPressed) {
